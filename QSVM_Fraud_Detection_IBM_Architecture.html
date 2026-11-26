@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QSVM Fraud Detection on IBM Quantum — Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400..700&family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    --ink: #0F1B2D; --paper: #F6F7F4; --paper2: #ECEEEA; --card: #FFFFFF;
+    --body: #46505F; --body-dark: #C3CCDA; --line: #CDD2D8;
+    --q: #6D4AE8; --q-light: #B7A5FF; --q-soft: #F3F0FE; --c: #4B5A6E;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+         font: 17px/1.55 'Inter', Arial, sans-serif; }
+  h1, h2, h3 { font-family: 'Space Grotesk', Arial, sans-serif; margin: 0; line-height: 1.15; }
+  h1 { font-size: clamp(30px, 4vw, 46px); }
+  h2 { font-size: clamp(24px, 3vw, 34px); }
+  h3 { font-size: 18px; font-weight: 600; }
+  p { margin: 0; color: var(--body); }
+  .mono, code { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 0.92em; }
+  .eyebrow { font-family: 'JetBrains Mono', 'Courier New', monospace; font-weight: 600; font-size: 14px;
+             letter-spacing: 1.5px; text-transform: uppercase; color: var(--q); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  header { background: var(--ink); color: var(--paper); padding: 64px 0 56px; }
+  header .eyebrow { color: var(--q-light); }
+  header h1 { margin: 14px 0 16px; }
+  header p { color: var(--body-dark); max-width: 780px; font-size: 19px; }
+  nav { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+  nav a { color: var(--paper); text-decoration: none; border: 1px solid #33425A; border-radius: 999px;
+          padding: 6px 16px; font-size: 15px; }
+  nav a:hover { border-color: var(--q-light); }
+
+  section { padding: 64px 0; }
+  section.alt { background: var(--paper2); }
+  section.dark { background: var(--ink); }
+  section.dark h2 { color: var(--paper); }
+  section.dark .eyebrow { color: var(--q-light); }
+  .head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
+  .note { margin-top: 24px; font-size: 15px; color: #6B7482; }
+  section.dark .note { color: #8D98AB; }
+
+  /* Section 1: two zones */
+  .zones { display: grid; grid-template-columns: 1.15fr 150px 1fr; gap: 16px; align-items: stretch; }
+  .zone { border: 2px dashed var(--line); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
+  .zone.cloud { border-color: var(--q-light); background: var(--q-soft); }
+  .zlabel { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 14px; color: var(--c); letter-spacing: 1px; }
+  .zone.cloud .zlabel { color: var(--q); }
+  .mini { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px;
+          display: flex; gap: 12px; align-items: baseline; }
+  .mini .n { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--q); min-width: 18px; }
+  .mini .t { color: var(--ink); }
+  .mini.q { background: var(--q); border-color: var(--q); }
+  .mini.q .n { color: #E9E3FF; } .mini.q .t { color: #FFFFFF; }
+  .wire { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px;
+          font-family: 'JetBrains Mono', monospace; font-size: 14px; text-align: center; }
+  .wire svg { width: 120px; height: 28px; }
+
+  /* Section 2: lanes */
+  .lanes { display: flex; flex-direction: column; gap: 16px; }
+  .lane { display: grid; grid-template-columns: 130px 1fr 30px 1fr 30px 1fr; gap: 10px; align-items: stretch; }
+  .lane .label { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 14px; align-self: center; }
+  .label.c { color: var(--c); } .label.q { color: var(--q); } .label.k { color: var(--ink); }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+  .step.q { background: var(--q); border-color: var(--q); } .step.q h3 { color: #FFF; } .step.q p { color: #E9E3FF; }
+  .step.k { background: var(--ink); border-color: var(--ink); } .step.k h3 { color: var(--paper); } .step.k p { color: var(--body-dark); }
+  .step.wide { grid-column: span 3; }
+  .arr { align-self: center; justify-self: center; width: 26px; height: 20px; }
+  .formula { margin-top: 24px; font-family: 'JetBrains Mono', monospace; font-size: 20px; background: var(--card);
+             border-left: 6px solid var(--q); border-radius: 6px; padding: 14px 20px; display: inline-block; }
+
+  /* Section 3: results */
+  table { width: 100%; border-collapse: collapse; font-size: 16px; }
+  th { text-align: left; font-family: 'Space Grotesk', Arial, sans-serif; color: var(--paper); font-weight: 600;
+       padding: 12px 14px; border-bottom: 2px solid var(--paper); }
+  td { padding: 12px 14px; border-bottom: 1px solid #33425A; color: var(--body-dark); }
+  td.name { font-weight: 600; color: var(--paper); }
+  td.q { font-weight: 600; color: var(--q-light); }
+  .table-scroll { overflow-x: auto; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 28px; }
+  .card { background: #1A2A40; border: 1px solid #33425A; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .card .tag { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 13px; letter-spacing: 1px; color: var(--q-light); }
+  .card p { color: var(--body-dark); }
+
+  footer { padding: 28px 0 40px; font-size: 14px; color: #6B7482; }
+
+  @media (max-width: 860px) {
+    .zones { grid-template-columns: 1fr; }
+    .wire { flex-direction: row; }
+    .wire svg { transform: rotate(90deg); width: 60px; }
+    .lane { grid-template-columns: 1fr; }
+    .lane .arr { transform: rotate(90deg); }
+    .step.wide { grid-column: auto; }
+    .cards { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">Case Study 4 · Option A · Track: Financial Inclusion &amp; Resilient Markets</p>
+    <h1>QSVM fraud detection on IBM Quantum — architecture</h1>
+    <p>A hybrid pipeline for classifying mobile-money fraud: classical data preparation and SVM training on a laptop, quantum-kernel circuits executed on a real IBM quantum computer through Qiskit Runtime, compared fairly with a classical RBF-kernel SVM.</p>
+    <nav aria-label="Sections">
+      <a href="#system">1 · System architecture</a>
+      <a href="#pipeline">2 · Quantum kernel pipeline</a>
+      <a href="#results">3 · Results &amp; limits</a>
+    </nav>
+  </div>
+</header>
+
+<!-- 1. System architecture -->
+<section id="system" class="alt">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">1 · System architecture</p>
+      <h2>The laptop prepares, IBM Quantum measures</h2>
+    </div>
+    <div class="zones">
+      <div class="zone">
+        <p class="zlabel">YOUR LAPTOP / COLAB · CLASSICAL</p>
+        <div class="mini"><span class="n">1</span><span class="t">Generate data, stratified 30 / 20 split</span></div>
+        <div class="mini"><span class="n">2</span><span class="t">PCA: 9 features → 4 qubit angles</span></div>
+        <div class="mini"><span class="n">3</span><span class="t">Tune bandwidth b and C on exact simulator</span></div>
+        <div class="mini"><span class="n">4</span><span class="t">Transpile once, build 1,035 parameter sets</span></div>
+        <div class="mini"><span class="n">7</span><span class="t">Counts → kernel tables (probability of 0000)</span></div>
+        <div class="mini"><span class="n">8</span><span class="t">Train QSVM, compare with RBF SVM</span></div>
+      </div>
+      <div class="wire" aria-label="One job with two PUBs goes to IBM Quantum; bit counts come back">
+        <span>1 job · 2 PUBs</span>
+        <svg viewBox="0 0 120 28" aria-hidden="true"><path d="M0 14H104" stroke="#6D4AE8" stroke-width="6"/><path d="M100 2L120 14L100 26Z" fill="#6D4AE8"/></svg>
+        <svg viewBox="0 0 120 28" aria-hidden="true"><path d="M16 14H120" stroke="#4B5A6E" stroke-width="6"/><path d="M20 2L0 14L20 26Z" fill="#4B5A6E"/></svg>
+        <span>bit counts</span>
+      </div>
+      <div class="zone cloud">
+        <p class="zlabel">IBM QUANTUM CLOUD · QISKIT RUNTIME</p>
+        <div class="mini"><span class="n">5</span><span class="t">API key login, job queued on least-busy device</span></div>
+        <div class="mini q"><span class="n">6</span><span class="t">SamplerV2 runs U(a)·U(b)† circuits, 512 shots each</span></div>
+        <div class="mini"><span class="n">6</span><span class="t">Dynamical decoupling + gate twirling</span></div>
+        <div class="mini"><span class="n">6</span><span class="t">Return measured bitstrings per circuit</span></div>
+      </div>
+    </div>
+    <p class="note">Numbers show the order of operations. The QPU only measures similarities; all learning stays classical. <code>RUN_MODE = "local"</code> swaps the cloud for FakeFez, a noisy laptop copy of IBM Heron: same code, no API key. The API key is read from an environment variable or a hidden prompt, never written in the notebook.</p>
+  </div>
+</section>
+
+<!-- 2. Pipeline -->
+<section id="pipeline">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">2 · How the quantum kernel is built</p>
+      <h2>From a transaction to a similarity score in three stages</h2>
+    </div>
+    <div class="lanes">
+      <div class="lane">
+        <p class="label c">PREPARE</p>
+        <div class="step"><h3>Fair sample</h3><p>50 transactions, stratified 30 / 20, seed 42</p></div>
+        <svg class="arr" viewBox="0 0 26 20" aria-hidden="true"><path d="M0 10H16M12 2L24 10L12 18" stroke="#9AA3AF" stroke-width="3" fill="none"/></svg>
+        <div class="step"><h3>PCA → 4 qubits</h3><p>9 features → 4, 81.7% variance kept</p></div>
+        <svg class="arr" viewBox="0 0 26 20" aria-hidden="true"><path d="M0 10H16M12 2L24 10L12 18" stroke="#9AA3AF" stroke-width="3" fill="none"/></svg>
+        <div class="step"><h3>Angles × b</h3><p>[0, π] scaled by b = 0.1, tuned on simulator</p></div>
+      </div>
+      <div class="lane">
+        <p class="label q">MEASURE</p>
+        <div class="step q"><h3>Fidelity circuit</h3><p>U(a) then U(b)†: ZZ map, linear entanglement, 2 reps</p></div>
+        <svg class="arr" viewBox="0 0 26 20" aria-hidden="true"><path d="M0 10H16M12 2L24 10L12 18" stroke="#6D4AE8" stroke-width="3" fill="none"/></svg>
+        <div class="step q"><h3>SamplerV2 on IBM</h3><p>1,035 circuits × 512 shots, one job</p></div>
+        <svg class="arr" viewBox="0 0 26 20" aria-hidden="true"><path d="M0 10H16M12 2L24 10L12 18" stroke="#6D4AE8" stroke-width="3" fill="none"/></svg>
+        <div class="step q"><h3>Kernel tables</h3><p class="mono">K = count(0000) ÷ 512</p></div>
+      </div>
+      <div class="lane">
+        <p class="label k">CLASSIFY</p>
+        <div class="step k"><h3>QSVM</h3><p>SVC on precomputed quantum kernel, C = 10</p></div>
+        <svg class="arr" viewBox="0 0 26 20" aria-hidden="true"><path d="M0 10H16M12 2L24 10L12 18" stroke="#9AA3AF" stroke-width="3" fill="none"/></svg>
+        <div class="step k wide"><h3>Compare on the same 20 test rows</h3><p>vs classical RBF SVM (C = 1, γ = scale) and the noise-free ideal QSVM</p></div>
+      </div>
+    </div>
+    <p class="formula">K(a, b) = |⟨ψ(a)|ψ(b)⟩|² ≈ count(“0000”) ÷ shots</p>
+    <p class="note">Identical transactions return to 0000 on every shot; different ones return less often. On IBM Heron the circuit compiles to rz · sx · cz gates: 22 two-qubit gates, depth 129. Bandwidth and C are tuned with cross-validation on the free exact simulator, so the QPU is used only once, for the final kernel.</p>
+  </div>
+</section>
+
+<!-- 3. Results -->
+<section id="results" class="dark">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">3 · Outputs &amp; limits</p>
+      <h2>Quantum vs classical on the same test set</h2>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Classical RBF SVM</td><td>0.90</td><td>1.00</td><td>0.67</td><td class="name">0.80</td></tr>
+          <tr><td class="q">QSVM · ideal (exact simulator)</td><td>0.85</td><td>1.00</td><td>0.50</td><td class="q">0.67</td></tr>
+          <tr><td class="q">QSVM · noisy IBM copy (FakeFez)</td><td>0.80</td><td>1.00</td><td>0.33</td><td class="q">0.50</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="cards">
+      <div class="card"><p class="tag">NO ADVANTAGE YET</p><p>The tuned RBF SVM matches or beats both QSVMs; hardware noise mainly costs recall.</p></div>
+      <div class="card"><p class="tag">SCALE</p><p>Circuits grow as N²: 50 rows → 1,035 circuits; 1,000 rows → about 500,000.</p></div>
+      <div class="card"><p class="tag">SMALL SAMPLE</p><p>Only 6 fraud cases in the test set; synthetic data with 30% fraud.</p></div>
+    </div>
+    <p class="note">Figures from the local run; a real IBM run fills the third row with its own measured results. Precision is 1.00 for all three models (no false alarms on this test set); the differences are in recall. One fraud case moves recall by about 17 points, so treat small gaps as ties. Next steps: more shots, stronger error mitigation, shallower circuits, and real imbalanced data.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Source notebook: QSVM_Fraud_Detection_IBM_Quantum.ipynb · Qiskit 2.6.2 · qiskit-ibm-runtime 0.52.1 · scikit-learn 1.9.1</div>
+</footer>
+
+</body>
+</html>
